@@ -3,3 +3,8 @@ dist/
 .env
 *.log
 .DS_Store
+
+# Andaime de preparacao: scripts que baixaram os dados da Fake Store API uma
+# unica vez. Nao fazem parte do projeto -- o que importa e o resultado deles,
+# em data/raw/, que E versionado para o seed rodar sem internet.
+tools/
