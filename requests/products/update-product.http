@@ -1,0 +1,176 @@
+### =====================================================================
+### PATCH /products/:id  --  topico 1.6 (updateOne com $set)
+###
+### Atualizacao PARCIAL: envie apenas os campos que quer mudar. Os ausentes
+### continuam como estao -- e isso e o que `$set` garante.
+###
+### Arquivos: routes/productRoutes.ts -> controllers/productController.ts
+###           -> services/productService.ts -> repositories/productRepository.ts
+###
+### No meta da resposta vem `matched` e `modified`:
+###   matched  -- o filtro { _id } encontrou o documento
+###   modified -- algo mudou de fato no disco
+### =====================================================================
+
+@baseUrl = http://localhost:3000
+
+
+### 1) PREPARO -- pega um _id real do banco
+# Rode esta primeiro; as requisicoes seguintes reaproveitam o id.
+# @name umProduto
+GET {{baseUrl}}/products?limit=1
+
+@productId = {{umProduto.response.body.$.data[0]._id}}
+
+
+### 2) SUCESSO -- muda um campo so
+# Esperado: 200 com o produto atualizado e meta { matched: 1, modified: 1 }
+# title, category, image e rating continuam intactos: nao foram citados.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "price": 129.9
+}
+
+
+### 3) SUCESSO -- reenvia o MESMO valor
+# Esperado: 200, meta { matched: 1, modified: 1 }
+#
+# Em teoria isso daria modified: 0 -- o documento existe, nada mudou. Aqui da 1
+# porque o repository grava `updatedAt: new Date()` em todo $set, e essa data e
+# sempre diferente da anterior.
+#
+# Para VER a diferenca, rode no mongosh sem o updatedAt, duas vezes:
+#   db.products.updateOne({ _id: ObjectId("...") }, { $set: { price: 129.9 } })
+# A primeira responde modifiedCount: 1, a segunda modifiedCount: 0.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "price": 129.9
+}
+
+
+### 4) SUCESSO -- tirar de circulacao sem apagar (soft delete)
+# Esperado: 200 com available: false
+# Este e o caminho recomendado quando o produto ja aparece em carrinhos: o
+# historico das compras e preservado e o produto para de ser oferecido.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "available": false
+}
+
+
+### 5) SUCESSO -- varios campos de uma vez
+# Esperado: 200. As chaves entram todas no mesmo $set, numa unica escrita.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "title": "Titulo atualizado pela API",
+  "price": 99.5,
+  "available": true
+}
+
+
+### 6) SUCESSO -- rating inteiro
+# Esperado: 200
+# `$set: { rating: {...} }` SUBSTITUI o subdocumento todo. Por isso o schema
+# exige rate E count juntos: mandar so `rate` apagaria o `count`.
+# Alterar um campo interno isolado usa notacao de ponto ("rating.rate"), que e
+# o topico 1.14 -- vem em etapa propria.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "rating": { "rate": 4.7, "count": 250 }
+}
+
+
+### 7) ERRO -- corpo vazio
+# Esperado: 400 BAD_REQUEST -- "envie ao menos um campo para atualizar"
+# Sem essa checagem, o $set sairia vazio e o driver devolveria um erro obscuro.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{}
+
+
+### 8) ERRO -- tentar reescrever o _id
+# Esperado: 400 BAD_REQUEST -- Unrecognized key: "_id"
+# O _id e imutavel no MongoDB: nem o banco aceitaria a troca.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "_id": "000000000000000000000000"
+}
+
+
+### 9) ERRO -- tentar reescrever o externalId
+# Esperado: 400 BAD_REQUEST -- Unrecognized key: "externalId"
+# externalId e a ancora que mantem o seed idempotente. Se a rota pudesse
+# troca-lo, uma reexecucao do seed duplicaria ou sobrescreveria produtos.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "externalId": 999
+}
+
+
+### 10) ERRO -- tentar injetar operador do MongoDB
+# Esperado: 400 BAD_REQUEST -- Unrecognized key: "$set"
+# Para o schema, "$set" e so uma chave desconhecida. E por isso que o corpo da
+# requisicao nunca e repassado direto ao driver.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "$set": { "price": 0 }
+}
+
+
+### 11) ERRO -- valor invalido
+# Esperado: 400 BAD_REQUEST -- "price nao pode ser negativo"
+# A regra de dominio vale igual no PATCH e no POST: mesmo `productFields`.
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "price": -10
+}
+
+
+### 12) ERRO -- rate fora da faixa
+# Esperado: 400 BAD_REQUEST -- "rate deve estar entre 0 e 5"
+PATCH {{baseUrl}}/products/{{productId}}
+Content-Type: application/json
+
+{
+  "rating": { "rate": 11, "count": 3 }
+}
+
+
+### 13) ERRO -- id fora do formato
+# Esperado: 400 INVALID_OBJECT_ID (nao chega ao banco)
+PATCH {{baseUrl}}/products/abc
+Content-Type: application/json
+
+{
+  "price": 10
+}
+
+
+### 14) ERRO -- id valido, produto inexistente
+# Esperado: 404 NOT_FOUND
+# matched foi 0. Nada foi criado: updateOne sem `upsert: true` nunca insere.
+PATCH {{baseUrl}}/products/000000000000000000000000
+Content-Type: application/json
+
+{
+  "price": 10
+}

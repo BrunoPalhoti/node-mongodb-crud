@@ -1,8 +1,13 @@
-import { notFound } from "../errors/AppError.js";
+import { conflict, notFound } from "../errors/AppError.js";
+import * as cartRepository from "../repositories/cartRepository.js";
 import * as productRepository from "../repositories/productRepository.js";
 import type { ProductDocument } from "../types/product.js";
 import { toObjectId } from "../validation/objectId.js";
-import type { CreateProductInput, ListProductsQuery } from "../validation/productSchemas.js";
+import type {
+  CreateProductInput,
+  ListProductsQuery,
+  UpdateProductInput,
+} from "../validation/productSchemas.js";
 
 /**
  * SERVICE -- regras da aplicacao, sem HTTP e sem MongoDB.
@@ -47,17 +52,63 @@ export async function listProducts(query: ListProductsQuery): Promise<ProductDoc
 }
 
 export async function getProductById(id: string): Promise<ProductDocument> {
-  // A conversao valida o formato e lanca 400 quando o texto nao e um ObjectId.
   const objectId = toObjectId(id);
 
   const product = await productRepository.findProductById(objectId);
   if (!product) {
-   /**
-    * Id bem formado, documento inexistente: 404. Diferente do id malformado,
-    * que ja virou 400 na linha acima.
-   */
+ 
     throw notFound(`Produto ${id} nao encontrado.`);
   }
 
   return product;
+}
+
+export interface UpdateProductResult {
+  product: ProductDocument;
+  matched: number;
+  modified: number;
+}
+
+/**
+ * Atualizacao parcial pelo _id.
+ */
+export async function updateProduct(
+  id: string,
+  input: UpdateProductInput,
+): Promise<UpdateProductResult> {
+  const objectId = toObjectId(id);
+
+  const outcome = await productRepository.updateProductById(objectId, input);
+
+  /** matched = 0 significa que o filtro nao achou ninguem: o id e valido, mas o
+   * documento nao existe. Nada foi criado, porque nao usamos upsert.
+   */
+  if (outcome.matched === 0) throw notFound(`Produto ${id} nao encontrado.`);
+
+  const product = await productRepository.findProductById(objectId);
+  if (!product) throw notFound(`Produto ${id} nao encontrado.`);
+
+  return { product, matched: outcome.matched, modified: outcome.modified };
+}
+
+/**
+ * Exclusao individual pelo _id, com checagem de integridade.
+ */
+export async function deleteProduct(id: string): Promise<void> {
+  const objectId = toObjectId(id);
+
+  const cartsUsingProduct = await cartRepository.countCartsWithProduct(objectId);
+  if (cartsUsingProduct > 0) {
+    throw conflict(
+      `Produto ${id} nao pode ser excluido: esta referenciado em ${cartsUsingProduct} carrinho(s).`,
+      {
+        cartsReferencing: cartsUsingProduct,
+        hint: 'Para tirar de circulacao preservando o historico: PATCH /products/<id> { "available": false }',
+      },
+    );
+  }
+
+  const deletedCount = await productRepository.deleteProductById(objectId);
+
+  if (deletedCount === 0) throw notFound(`Produto ${id} nao encontrado.`);
 }

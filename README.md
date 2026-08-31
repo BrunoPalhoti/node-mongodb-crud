@@ -51,8 +51,10 @@ src/
   errors/AppError.ts          erros de dominio com status HTTP
   errors/errorHandler.ts      traducao de erros para resposta JSON
   types/                      tipos dos documentos (product, user, cart)
-  validation/                 schemas zod e conversao de ObjectId
-  http/respond.ts             respostas de sucesso padronizadas
+  validation/                 schemas zod, conversao de ObjectId e parseOrThrow
+  validation/queryParams.ts   conversores de query string (limit, booleano)
+  http/respond.ts             res.success: envelope e status da resposta
+  http/pathId.ts              normaliza o :id vindo da URL
   routes/                     mapa metodo+caminho -> controller
   controllers/                HTTP: status e formato da resposta
   services/                   regras da aplicacao
@@ -320,7 +322,7 @@ HTTP -> validacao (zod) -> controller -> service -> repository -> MongoDB -> res
 | `controllers/`| status HTTP e formato da resposta      | **nenhuma query MongoDB**        |
 | `services/`  | regras (defaults, 404, montar documento)| nao conhece `req` nem filtros    |
 | `repositories/`| **unico lugar** que fala com o driver | nao conhece HTTP                 |
-| `http/`      | helpers de resposta (`ok`, `created`...) | nao decide regra de negocio      |
+| `http/`      | `res.success`: envelope e status HTTP    | nao decide regra de negocio      |
 
 ## Formato das respostas
 
@@ -332,11 +334,20 @@ Sucesso vai em `data`, erro vai em `error`. Colecoes acrescentam `meta`.
 { "error": { "code": "NOT_FOUND", "message": "..." } }
 ```
 
-Os controllers usam os helpers de `src/http/respond.ts`, onde o status esta no
-nome da funcao -- `ok` (200), `created` (201), `noContent` (204) e `collection`
-(200 com `meta`). Todos aceitam `status` opcional para override.
+Os controllers respondem sempre com o mesmo metodo, instalado no `res` pelo
+middleware de `src/http/respond.ts`:
 
-Nada sobrescreve `res.json`: a chamada continua visivel no controller.
+```ts
+return res.success(product);                    // POST -> 201, GET -> 200
+return res.success(products, { limit });        // array -> 200 + meta.count
+return res.success();                           // sem corpo -> 204
+```
+
+O status nao e passado a mao: sai do metodo HTTP da requisicao (`POST` = 201,
+resto = 200) ou da ausencia de corpo (204). Para o caso excepcional,
+`res.status(202).success(x)` -- um status definido antes vence a deducao.
+
+Nada sobrescreve `res.json`: o metodo original segue intacto e disponivel.
 As rotas `/health` sao excecao e respondem sem envelope, porque nao
 representam recurso e ferramentas de monitoramento esperam o status na raiz.
 
@@ -364,7 +375,8 @@ curl -X POST http://localhost:3000/products \
   -d '{"title":"Teclado mecanico 75%","price":349.9,"category":"electronics","image":"https://exemplo.local/teclado.png"}'
 ```
 
-Sucesso: **201** com `{ data: { ...produto } }` e header `Location`.
+Sucesso: **201** com `{ data: { ...produto } }`. O corpo ja traz o `_id`
+gerado, entao nao ha header `Location`.
 Erros: **400** payload invalido (campo faltando, tipo errado, `externalId`
 enviado), **409** violacao de indice unico.
 
@@ -406,6 +418,76 @@ Erros: **400** id fora do formato (24 hex), **404** id valido mas inexistente.
 A distincao e proposital: `abc` nunca poderia ser um `_id` (400), enquanto
 `000000000000000000000000` poderia existir mas nao existe (404).
 
+### `PATCH /products/:id` -- topico 1.6
+
+Atualizacao **parcial** pelo `_id`. Collection: `products`.
+
+Body: qualquer subconjunto de `title`, `price`, `description`, `category`,
+`image`, `rating`, `available`. Nenhum e obrigatorio, mas o corpo precisa ter
+**ao menos um** campo. As regras de valor sao as mesmas do `POST`.
+
+Rejeitados com **400**: `_id`, `externalId`, `createdAt`, `updatedAt` e
+qualquer operador do MongoDB (`$set`, `$inc`, ...) -- para o schema `strict`,
+sao apenas chaves desconhecidas. `updatedAt` e gravado pelo servidor em toda
+atualizacao.
+
+```bash
+curl -X PATCH http://localhost:3000/products/6a95919e0b8f6886c62c9079 \
+  -H "Content-Type: application/json" \
+  -d '{"price":129.9,"available":false}'
+```
+
+Sucesso: **200** com `{ data: { ...produto atualizado }, meta: { matched, modified } }`.
+Erros: **400** id fora do formato, corpo vazio, campo desconhecido ou valor
+invalido; **404** id valido mas inexistente.
+
+`matched` e quantos documentos o filtro encontrou; `modified`, em quantos algo
+mudou de fato. Reenviar o mesmo valor daria `matched: 1, modified: 0` -- mas
+neste projeto `modified` sera sempre 1 quando houver match, porque `updatedAt`
+muda em todo `$set`. Para observar a diferenca, rode no mongosh sem essa data:
+
+```js
+db.products.updateOne({ _id: ObjectId("...") }, { $set: { price: 129.9 } })
+// 1a vez: modifiedCount 1   2a vez: modifiedCount 0
+```
+
+`matched: 0` vira **404**, e nada e criado: sem `upsert: true`, o `updateOne`
+nunca insere.
+
+### `DELETE /products/:id` -- topico 1.8
+
+Exclusao individual pelo `_id`. Collection: `products`.
+
+Sem body e sem query params. A rota **nao** aceita filtro: com
+`{ category: "electronics" }` o `deleteOne` apagaria um documento qualquer
+entre os que casam, sem avisar que havia outros. Exclusao por filtro e o
+topico 1.9, com rota propria.
+
+```bash
+curl -X DELETE http://localhost:3000/products/6a95919e0b8f6886c62c9079
+```
+
+Sucesso: **204** sem corpo.
+Erros: **400** id fora do formato; **404** id valido mas inexistente
+(`deletedCount: 0`, que para o MongoDB **nao** e erro); **409** produto
+referenciado em carrinho.
+
+**Politica de integridade.** Antes de apagar, a API conta os carrinhos que
+citam o produto (`carts.items.productId`) e recusa com **409** se houver algum,
+informando quantos em `details.cartsReferencing`. O MongoDB nao tem chave
+estrangeira: sem essa checagem, o carrinho ficaria apontando para um `_id`
+inexistente em silencio. A checagem e melhor-esforco, nao atomica -- um
+carrinho criado entre a contagem e o delete escaparia, e resolver isso exigiria
+transacao, fora do escopo deste modulo.
+
+Para produtos que ja circularam, o caminho recomendado e o **soft delete**, que
+preserva o historico de compra:
+
+```bash
+curl -X PATCH http://localhost:3000/products/<id> \
+  -H "Content-Type: application/json" -d '{"available":false}'
+```
+
 ### Saude
 
 ```bash
@@ -421,7 +503,11 @@ curl http://localhost:3000/health/db
 | 1.2 `find()` sem filtro | `GET /products` | `curl ".../products"` | `findProducts({}, limit)` |
 | 1.3 `find()` com igualdade | `GET /products?category=` | `curl ".../products?category=electronics"` | `findProducts({category}, limit)` |
 | 1.4 `findOne()` | `GET /products/:id` | `curl ".../products/6a9591..."` | `findProductById()` |
+| 1.6 `updateOne()` | `PATCH /products/:id` | `curl -X PATCH .../products/6a9591... -d '{"price":129.9}'` | `updateProductById()` |
+| 1.8 `deleteOne()` | `DELETE /products/:id` | `curl -X DELETE .../products/6a9591...` | `deleteProductById()` |
+| 1.10 `countDocuments()` (parcial) | integridade do `DELETE` | `curl -X DELETE .../products/<id-em-carrinho>` | `countCartsWithProduct()` |
 | 1.12 `limit()` | `GET /products?limit=` | `curl ".../products?limit=3"` | `findProducts(..., limit)` |
+| 1.14 campos internos (parcial) | integridade do `DELETE` | idem acima | `countCartsWithProduct()` (`"items.productId"`) |
 
 ## Progresso
 
@@ -429,5 +515,6 @@ curl http://localhost:3000/health/db
 - [x] Etapa 2 - Coleta dos dados de origem para JSON local
 - [x] Etapa 3 - Modelagem das collections e seed idempotente
 - [x] Etapa 4 - Cadastro e consultas simples (1.1, 1.2, 1.3, 1.4)
-- [ ] Etapa 5 - Atualizacoes e exclusoes (1.6 a 1.9)
-- [ ] Etapa 6+ - Lote, contagem, ordenacao, projecao, regex, comparacoes
+- [x] Etapa 5 - Atualizacao e exclusao individuais (1.6, 1.8)
+- [ ] Etapa 6 - Operacoes em lote (1.5 `insertMany`, 1.7 `updateMany`, 1.9 `deleteMany`)
+- [ ] Etapa 7+ - Contagem, ordenacao, projecao, campos internos, regex, comparacoes

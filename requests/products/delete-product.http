@@ -1,0 +1,92 @@
+### =====================================================================
+### DELETE /products/:id  --  topico 1.8 (deleteOne)
+###
+### Exclusao individual, sempre pelo _id. A rota NAO aceita filtro: com
+### { category: "electronics" }, o deleteOne apagaria UM documento qualquer
+### entre os que casam, sem dizer que havia outros.
+###
+### Antes de apagar, a API confere se algum carrinho referencia o produto.
+### O MongoDB nao tem chave estrangeira -- essa garantia e da aplicacao.
+###
+### Arquivos: routes/productRoutes.ts -> controllers/productController.ts
+###           -> services/productService.ts -> repositories/productRepository.ts
+###           -> repositories/cartRepository.ts (checagem de integridade)
+### =====================================================================
+
+@baseUrl = http://localhost:3000
+
+
+### 1) CONFERIR ANTES DE APAGAR -- veja o que vai embora
+# Habito que evita estrago: primeiro olhe o documento, depois apague.
+# Troque o id pelo que voce pretende excluir.
+GET {{baseUrl}}/products/000000000000000000000000
+
+
+### 2) PREPARO -- cria um produto descartavel
+# Um produto novo, criado pela API, nao esta em nenhum carrinho -- e o candidato
+# seguro para testar exclusao sem mexer nos dados vindos do seed.
+# @name descartavel
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Produto descartavel para teste de DELETE",
+  "price": 1,
+  "category": "teste",
+  "image": "https://exemplo.local/descartavel.png"
+}
+
+@descartavelId = {{descartavel.response.body.$.data._id}}
+
+
+### 3) SUCESSO -- apaga o produto criado acima
+# Esperado: 204 No Content, sem corpo nenhum.
+# 204 e nao 200: nao sobrou recurso para devolver. Devolver o documento apagado
+# seria entregar ao cliente algo que nao existe mais no banco.
+DELETE {{baseUrl}}/products/{{descartavelId}}
+
+
+### 4) CONFIRMAR -- o mesmo id agora nao existe
+# Esperado: 404 NOT_FOUND
+GET {{baseUrl}}/products/{{descartavelId}}
+
+
+### 5) ERRO -- apagar de novo o que ja foi apagado
+# Esperado: 404 NOT_FOUND
+# Para o MongoDB isso NAO e erro: deletedCount vem 0 e a operacao e um sucesso.
+# A traducao para 404 e decisao da API, feita no service, para o cliente nao
+# acreditar que removeu algo.
+DELETE {{baseUrl}}/products/{{descartavelId}}
+
+
+### 6) ERRO -- id fora do formato
+# Esperado: 400 INVALID_OBJECT_ID (nem chega ao banco)
+DELETE {{baseUrl}}/products/abc
+
+
+### 7) ERRO -- id valido, produto inexistente
+# Esperado: 404 NOT_FOUND
+DELETE {{baseUrl}}/products/000000000000000000000000
+
+
+### 8) CONFLITO -- produto referenciado em carrinho
+# Esperado: 409 CONFLICT, com details.cartsReferencing
+#
+# O produto NAO e apagado: rode o GET do bloco 1 com este id depois e ele
+# continua lá, com available: true.
+#
+# O id abaixo veio do seed e esta em 4 carrinhos. Se sua base for outra,
+# descubra um assim no mongosh:
+#   db.carts.findOne({}, { "items.productId": 1 })
+#
+# A alternativa recomendada e o soft delete, que mantem o historico do carrinho:
+#   PATCH /products/<id>  { "available": false }
+DELETE {{baseUrl}}/products/6a95919e0b8f6886c62c9079
+
+
+### 9) ERRO -- exclusao em massa nao existe nesta rota
+# Esperado: 404 ROUTE_NOT_FOUND
+# Nao ha DELETE /products sem id. Exclusao por filtro (topico 1.9, deleteMany)
+# tera rota propria, com filtro obrigatorio e validado -- filtro vazio jamais
+# sera aceito.
+DELETE {{baseUrl}}/products
