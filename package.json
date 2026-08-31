@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check:db": "tsx src/scripts/checkConnection.ts"
+    "check:db": "tsx src/scripts/checkConnection.ts",
+    "db:indexes": "tsx src/scripts/ensureIndexes.ts"
   },
   "keywords": [
     "mongodb",
