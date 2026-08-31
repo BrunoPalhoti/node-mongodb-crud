@@ -1,0 +1,155 @@
+### =====================================================================
+### POST /products  --  topico 1.1 (insertOne)
+###
+### Cria um produto na collection `products`.
+### Arquivos: routes/productRoutes.ts -> controllers/productController.ts
+###           -> services/productService.ts -> repositories/productRepository.ts
+### =====================================================================
+
+@baseUrl = http://localhost:3000
+
+
+### 1) SUCESSO -- payload minimo
+# Esperado: 201 Created, corpo { data: { ...produto } } com o _id gerado
+# Os campos omitidos recebem os padroes: description "", rating {rate:0,count:0},
+# available true. E o produto nasce SEM externalId (campo ausente, nao null).
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Teclado mecanico 75%",
+  "price": 349.9,
+  "category": "electronics",
+  "image": "https://exemplo.local/teclado.png"
+}
+
+
+### 2) SUCESSO -- payload completo
+# Esperado: 201 Created
+# Aqui os padroes sao sobrescritos de forma explicita.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Monitor ultrawide 34",
+  "price": 2899.00,
+  "description": "Criado pela API, com todos os campos preenchidos",
+  "category": "electronics",
+  "image": "https://exemplo.local/monitor.png",
+  "rating": { "rate": 4.5, "count": 12 },
+  "available": false
+}
+
+
+### 3) ERRO -- campo obrigatorio ausente
+# Esperado: 400 BAD_REQUEST
+# details aponta title com "expected string, received undefined" -- a checagem
+# de tipo acontece antes da regra de tamanho minimo.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "price": 100,
+  "category": "electronics",
+  "image": "https://exemplo.local/x.png"
+}
+
+
+### 4) ERRO -- price negativo
+# Esperado: 400 BAD_REQUEST -- "price nao pode ser negativo"
+# Regra de dominio validada na entrada, antes de chegar ao banco.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Produto com preco invalido",
+  "price": -1,
+  "category": "electronics",
+  "image": "https://exemplo.local/x.png"
+}
+
+
+### 5) ERRO -- rating.rate fora da faixa 0..5
+# Esperado: 400 BAD_REQUEST -- "rate deve estar entre 0 e 5"
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Nota impossivel",
+  "price": 10,
+  "category": "electronics",
+  "image": "https://exemplo.local/x.png",
+  "rating": { "rate": 9, "count": 1 }
+}
+
+
+### 6) ERRO -- tentar forjar externalId
+# Esperado: 400 BAD_REQUEST -- Unrecognized key: "externalId"
+# externalId so existe para o que veio da fonte. O schema e `strict`, entao
+# campos nao declarados sao rejeitados em vez de ignorados em silencio.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Tentando forjar id externo",
+  "price": 10,
+  "category": "electronics",
+  "image": "https://exemplo.local/x.png",
+  "externalId": 999
+}
+
+
+### 7) ERRO -- tentar definir o _id
+# Esperado: 400 BAD_REQUEST -- Unrecognized key: "_id"
+# O _id e gerado pelo MongoDB; o cliente nao escolhe.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "_id": "6a95919e0b8f6886c62c9079",
+  "title": "Tentando escolher o _id",
+  "price": 10,
+  "category": "electronics",
+  "image": "https://exemplo.local/x.png"
+}
+
+
+### 8) ERRO -- injecao de operador MongoDB
+# Esperado: 400 BAD_REQUEST -- expected number, received object
+# Sem validacao, { "$gt": 0 } viraria um OPERADOR de consulta dentro do
+# documento. O schema barra antes de qualquer contato com o driver.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Injecao",
+  "price": { "$gt": 0 },
+  "category": "electronics",
+  "image": "https://exemplo.local/x.png"
+}
+
+
+### 9) ERRO -- image que nao e URL http(s)
+# Esperado: 400 BAD_REQUEST -- "image deve ser uma URL http(s)"
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "Imagem invalida",
+  "price": 10,
+  "category": "electronics",
+  "image": "arquivo-local.png"
+}
+
+
+### 10) ERRO -- JSON malformado (falta uma virgula)
+# Esperado: 400 INVALID_JSON
+# O erro vem do express.json(), ANTES do controller: o corpo nem chega a ser
+# validado pelo schema, porque nao da nem para interpretar como JSON.
+POST {{baseUrl}}/products
+Content-Type: application/json
+
+{
+  "title": "JSON quebrado"
+  "price": 10
+}

@@ -1,0 +1,22 @@
+### =====================================================================
+### Saude da aplicacao
+### =====================================================================
+
+@baseUrl = http://localhost:3000
+
+
+### 1) SUCESSO -- o processo esta no ar
+# Esperado: 200 { "status": "ok", "uptimeSeconds": N }
+# Nao toca no MongoDB: responde mesmo com o banco fora.
+GET {{baseUrl}}/health
+
+
+### 2) SUCESSO -- o processo fala com o MongoDB agora
+# Esperado: 200 com ping true e as collections products, users e carts
+# Util para separar "a API caiu" de "o banco caiu".
+GET {{baseUrl}}/health/db
+
+
+### 3) ERRO -- rota inexistente
+# Esperado: 404 ROUTE_NOT_FOUND
+GET {{baseUrl}}/health/nao-existe

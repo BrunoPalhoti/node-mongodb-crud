@@ -4,7 +4,6 @@ import { ZodError } from "zod";
 import { AppError } from "./AppError.js";
 import { isProduction } from "../config/env.js";
 
-/** 404 para rotas inexistentes: sem isso o Express devolveria HTML. */
 export function notFoundHandler(req: Request, res: Response): void {
   res.status(404).json({
     error: {
@@ -31,7 +30,23 @@ export function errorHandler(
     return;
   }
 
-  // Erros de validacao do zod chegam aqui quando o schema roda fora do middleware.
+  if (err instanceof SyntaxError && "status" in err && "body" in err) {
+    res.status(400).json({
+      error: { code: "INVALID_JSON", message: "Corpo da requisicao nao e um JSON valido." },
+    });
+    return;
+  }
+
+  if (typeof err === "object" && err !== null && "type" in err && "status" in err) {
+    const parseError = err as { type: string; status: number };
+    if (parseError.type === "entity.too.large") {
+      res.status(413).json({
+        error: { code: "PAYLOAD_TOO_LARGE", message: "Corpo da requisicao excede o limite de 1mb." },
+      });
+      return;
+    }
+  }
+
   if (err instanceof ZodError) {
     res.status(400).json({
       error: {
@@ -43,8 +58,6 @@ export function errorHandler(
     return;
   }
 
-  // 11000 = violacao de indice unico. Aqui aparece, por exemplo, ao tentar
-  // criar dois produtos com o mesmo externalId.
   if (err instanceof MongoServerError && err.code === 11000) {
     res.status(409).json({
       error: {
@@ -56,8 +69,6 @@ export function errorHandler(
     return;
   }
 
-  // Log no servidor, resposta generica para o cliente: stack trace e mensagem
-  // do driver podem conter host, porta e nomes internos.
   console.error("[erro nao tratado]", err);
   res.status(500).json({
     error: {

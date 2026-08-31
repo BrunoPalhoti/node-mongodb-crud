@@ -1,0 +1,61 @@
+### =====================================================================
+### GET /products/:id  --  topico 1.4 (findOne por _id)
+###
+### Esta rota separa dois erros que costumam ser confundidos:
+###   400 -- o texto nao pode ser um ObjectId (formato errado)
+###   404 -- e um ObjectId valido, mas nao existe documento com ele
+### =====================================================================
+
+@baseUrl = http://localhost:3000
+
+
+### 1) PREPARO -- pega um _id real do banco
+# Rode esta requisicao PRIMEIRO. O REST Client guarda a resposta e a proxima
+# requisicao reaproveita o _id, evitando copiar e colar o id na mao.
+# @name buscarUmProduto
+GET {{baseUrl}}/products?limit=1
+
+
+### 2) SUCESSO -- busca pelo _id obtido acima
+# Esperado: 200 com { data: { ...produto } }
+# Note que o _id vem de `data[0]._id` da listagem: o envelope tambem vale la.
+@productId = {{buscarUmProduto.response.body.$.data[0]._id}}
+GET {{baseUrl}}/products/{{productId}}
+
+
+### 3) SUCESSO -- id fixo (cole aqui um _id do seu banco)
+# Troque o valor abaixo por um _id real, obtido no Compass ou na listagem.
+GET {{baseUrl}}/products/6a95919e0b8f6886c62c9079
+
+
+### 4) ERRO -- id fora do formato
+# Esperado: 400 INVALID_OBJECT_ID
+# "abc" nunca poderia ser um _id, entao a resposta e "requisicao errada" (400),
+# e nao "nao encontrei" (404).
+GET {{baseUrl}}/products/abc
+
+
+### 5) ERRO -- 12 caracteres: o caso traicoeiro
+# Esperado: 400 INVALID_OBJECT_ID
+# ObjectId.isValid("productos123") retorna TRUE, porque 12 bytes e o tamanho de
+# um ObjectId. Se confiassemos so nela, a string viraria um id que nunca existe
+# e a resposta seria um 404 enganoso. Por isso exigimos 24 digitos hexadecimais.
+GET {{baseUrl}}/products/productos123
+
+
+### 6) ERRO -- caractere nao hexadecimal
+# Esperado: 400 INVALID_OBJECT_ID
+# Tem 24 caracteres, mas "z" nao existe em hexadecimal.
+GET {{baseUrl}}/products/zzzzzzzzzzzzzzzzzzzzzzzz
+
+
+### 7) ERRO -- id valido que nao existe
+# Esperado: 404 NOT_FOUND
+# Formato correto, documento ausente. Este e o 404 legitimo.
+GET {{baseUrl}}/products/000000000000000000000000
+
+
+### 8) ERRO -- rota inexistente
+# Esperado: 404 ROUTE_NOT_FOUND (codigo diferente do de cima)
+# Um e "o recurso nao existe", o outro e "essa rota nao existe".
+GET {{baseUrl}}/produtos/000000000000000000000000

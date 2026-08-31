@@ -44,12 +44,19 @@ cp .env.example .env   # ajuste se sua URI/porta forem diferentes
 ## Estrutura
 
 ```
+requests/                     requisicoes .http por rota (REST Client)
 src/
   config/env.ts               leitura e validacao das variaveis de ambiente
   db/mongo.ts                 conexao unica (MongoClient) reutilizada pelo processo
   errors/AppError.ts          erros de dominio com status HTTP
   errors/errorHandler.ts      traducao de erros para resposta JSON
   types/                      tipos dos documentos (product, user, cart)
+  validation/                 schemas zod e conversao de ObjectId
+  http/respond.ts             respostas de sucesso padronizadas
+  routes/                     mapa metodo+caminho -> controller
+  controllers/                HTTP: status e formato da resposta
+  services/                   regras da aplicacao
+  repositories/               unico lugar com queries MongoDB
   db/collections.ts           nomes das collections associados aos tipos
   db/indexes.ts               definicao dos indices da aplicacao
   scripts/checkConnection.ts  verificacao de ambiente, somente leitura
@@ -294,16 +301,133 @@ modulo, e prometer atomicidade sem implementar seria pior que nao ter.
 Rejeicao em cascata: um carrinho cujo usuario ou produto foi rejeitado e
 rejeitado **por inteiro**, nunca gravado com parte dos itens.
 
-## Endpoints disponiveis (etapas 1 a 3)
+## Testar a API
+
+A pasta [`requests/`](./requests) tem as requisicoes prontas em arquivos
+`.http`, um por rota, cada uma com os casos de sucesso e de erro. Abra no
+editor com a extensao **REST Client** e clique em Send Request. Os exemplos em
+`curl` deste README continuam validos como alternativa.
+
+## Fluxo de uma requisicao
+
+```
+HTTP -> validacao (zod) -> controller -> service -> repository -> MongoDB -> resposta
+```
+
+| Camada       | Responsabilidade                        | Nao faz                          |
+| ------------ | --------------------------------------- | -------------------------------- |
+| `validation/`| converte e valida entrada externa       | nao acessa banco                 |
+| `controllers/`| status HTTP e formato da resposta      | **nenhuma query MongoDB**        |
+| `services/`  | regras (defaults, 404, montar documento)| nao conhece `req` nem filtros    |
+| `repositories/`| **unico lugar** que fala com o driver | nao conhece HTTP                 |
+| `http/`      | helpers de resposta (`ok`, `created`...) | nao decide regra de negocio      |
+
+## Formato das respostas
+
+Sucesso vai em `data`, erro vai em `error`. Colecoes acrescentam `meta`.
+
+```json
+{ "data": { "_id": "6a95...", "title": "..." } }
+{ "data": [ ... ], "meta": { "count": 3, "limit": 20 } }
+{ "error": { "code": "NOT_FOUND", "message": "..." } }
+```
+
+Os controllers usam os helpers de `src/http/respond.ts`, onde o status esta no
+nome da funcao -- `ok` (200), `created` (201), `noContent` (204) e `collection`
+(200 com `meta`). Todos aceitam `status` opcional para override.
+
+Nada sobrescreve `res.json`: a chamada continua visivel no controller.
+As rotas `/health` sao excecao e respondem sem envelope, porque nao
+representam recurso e ferramentas de monitoramento esperam o status na raiz.
+
+`meta.count` e quantos documentos vieram **nesta** resposta, nao o total da
+collection. Se `count` for igual a `limit`, o resultado pode ter sido truncado.
+
+## Endpoints
+
+### `POST /products` -- topico 1.1
+
+Cria um produto. Collection: `products`.
+
+Body: `title` (string, obrigatorio), `price` (number >= 0, obrigatorio),
+`category` (string, obrigatorio), `image` (URL http(s), obrigatorio),
+`description` (string, padrao `""`), `rating` (padrao `{rate:0,count:0}`),
+`available` (boolean, padrao `true`).
+
+`_id` e `externalId` sao **rejeitados** se enviados: o schema e `strict`, e
+campos nao declarados viram 400. Produto criado pela API nasce **sem**
+`externalId` -- o campo fica ausente, nao null.
+
+```bash
+curl -X POST http://localhost:3000/products \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Teclado mecanico 75%","price":349.9,"category":"electronics","image":"https://exemplo.local/teclado.png"}'
+```
+
+Sucesso: **201** com `{ data: { ...produto } }` e header `Location`.
+Erros: **400** payload invalido (campo faltando, tipo errado, `externalId`
+enviado), **409** violacao de indice unico.
+
+### `GET /products` -- topicos 1.2, 1.3 e 1.12
+
+Lista produtos. Sem query params, e um `find({})`.
+
+| Query param | Formato                | Padrao | Efeito                       |
+| ----------- | ---------------------- | ------ | ---------------------------- |
+| `category`  | texto, 1 a 100 chars   | -      | igualdade exata              |
+| `available` | exatamente `true`/`false` | -   | igualdade exata              |
+| `limit`     | inteiro 1 a 100        | 20     | limita **documentos**        |
+
+Parametros desconhecidos viram **400** (`?categoria=` em vez de `?category=`
+avisa em vez de ser ignorado).
+
+```bash
+curl "http://localhost:3000/products"
+curl "http://localhost:3000/products?limit=3"
+curl "http://localhost:3000/products?category=electronics"
+curl "http://localhost:3000/products?category=electronics&available=true"
+```
+
+Sucesso: **200** com `{ data: [...], meta: { count, limit } }`.
+Nenhuma correspondencia: **200** com `data: []` -- listagem vazia **nao** e 404.
+Erros: **400** parametro invalido ou desconhecido.
+
+### `GET /products/:id` -- topico 1.4
+
+Busca por `_id`. Collection: `products`.
+
+```bash
+curl http://localhost:3000/products/6a95919e0b8f6886c62c9079
+```
+
+Sucesso: **200** com `{ data: { ...produto } }`.
+Erros: **400** id fora do formato (24 hex), **404** id valido mas inexistente.
+
+A distincao e proposital: `abc` nunca poderia ser um `_id` (400), enquanto
+`000000000000000000000000` poderia existir mas nao existe (404).
+
+### Saude
 
 ```bash
 curl http://localhost:3000/health
-curl http://localhost:3000/health/db   # agora lista products, users e carts
+curl http://localhost:3000/health/db
 ```
+
+## Mapeamento dos topicos
+
+| Topico | Endpoint | Exemplo | Metodo no repository |
+| ------ | -------- | ------- | -------------------- |
+| 1.1 `insertOne()` | `POST /products` | `curl -X POST .../products -d '{...}'` | `insertProduct()` |
+| 1.2 `find()` sem filtro | `GET /products` | `curl ".../products"` | `findProducts({}, limit)` |
+| 1.3 `find()` com igualdade | `GET /products?category=` | `curl ".../products?category=electronics"` | `findProducts({category}, limit)` |
+| 1.4 `findOne()` | `GET /products/:id` | `curl ".../products/6a9591..."` | `findProductById()` |
+| 1.12 `limit()` | `GET /products?limit=` | `curl ".../products?limit=3"` | `findProducts(..., limit)` |
 
 ## Progresso
 
 - [x] Etapa 1 - Configuracao, conexao e tratamento de erros
 - [x] Etapa 2 - Coleta dos dados de origem para JSON local
 - [x] Etapa 3 - Modelagem das collections e seed idempotente
-- [ ] Etapa 4+ - API e topicos 1.1 a 1.17
+- [x] Etapa 4 - Cadastro e consultas simples (1.1, 1.2, 1.3, 1.4)
+- [ ] Etapa 5 - Atualizacoes e exclusoes (1.6 a 1.9)
+- [ ] Etapa 6+ - Lote, contagem, ordenacao, projecao, regex, comparacoes

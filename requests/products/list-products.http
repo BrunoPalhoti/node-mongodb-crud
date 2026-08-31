@@ -1,0 +1,116 @@
+### =====================================================================
+### GET /products  --  topicos 1.2 (find sem filtro), 1.3 (igualdade),
+###                    1.12 (limit)
+###
+### Resposta: { data: [...], meta: { count, limit } }
+### `meta.count` e quantos vieram nesta resposta, nao o total da collection:
+### se count == limit, o resultado pode ter sido truncado.
+### =====================================================================
+
+@baseUrl = http://localhost:3000
+
+
+### 1) SUCESSO -- find() sem filtro
+# Esperado: 200, ate 20 documentos (DEFAULT_LIMIT)
+# Filtro {} significa "nenhuma condicao": todo documento corresponde.
+#
+# Atencao ao truncamento: se `meta.count` for igual a `meta.limit`, provavelmente
+# ha mais documentos que nao couberam. Vieram 20 da fonte, mais os que voce criar
+# pelo POST.
+GET {{baseUrl}}/products
+
+
+### 2) SUCESSO -- limit()
+# Esperado: 200 com meta.count = 3
+# limit() limita DOCUMENTOS, nunca campos. Esconder campos e projecao (1.13).
+GET {{baseUrl}}/products?limit=3
+
+
+### 3) SUCESSO -- filtro de igualdade por categoria
+# Esperado: 200, todos com category exatamente "electronics"
+# (6 vieram da fonte; mais os que voce criar pelo POST desta categoria)
+# Igualdade EXATA: nao e busca parcial nem case-insensitive.
+GET {{baseUrl}}/products?category=electronics
+
+
+### 4) SUCESSO -- categoria com apostrofo e espaco
+# Esperado: 200 com 4 produtos ("men's clothing")
+# A URL precisa vir codificada: %27 e o apostrofo e %20 e o espaco. Espaco
+# literal aqui quebra o REST Client, que leria "clothing" como versao do HTTP.
+GET {{baseUrl}}/products?category=men%27s%20clothing
+
+
+### 5) SUCESSO -- filtro booleano
+# Esperado: 200, os disponiveis (limitado a 20 por padrao)
+GET {{baseUrl}}/products?available=true
+
+
+### 6) SUCESSO -- available=false
+# Esperado: 200 com os indisponiveis (0 se voce ainda nao criou nenhum)
+# O ponto aqui: "false" e uma STRING na query. Boolean("false") seria true em
+# JavaScript -- o filtro faria o OPOSTO do pedido. Por isso a conversao e
+# explicita e so aceita os textos "true" e "false".
+GET {{baseUrl}}/products?available=false
+
+
+### 7) SUCESSO -- duas condicoes combinadas (E logico)
+# Esperado: 200 com eletronicos disponiveis
+# Varias chaves no mesmo filtro precisam ser satisfeitas ao mesmo tempo.
+GET {{baseUrl}}/products?category=electronics&available=true
+
+
+### 8) SUCESSO -- combinando filtro e limite
+GET {{baseUrl}}/products?category=women%27s%20clothing&available=true&limit=2
+
+
+### 9) SUCESSO (nao e erro!) -- nenhum documento corresponde
+# Esperado: 200 com { "data": [], "meta": { "count": 0, ... } }
+# Listagem vazia NAO e 404: a collection existe, apenas nada bate com o filtro.
+GET {{baseUrl}}/products?category=inexistente
+
+
+### 10) SUCESSO -- igualdade diferencia maiusculas
+# Esperado: 200 com meta.count 0, porque a categoria gravada e "electronics"
+# Para ignorar maiusculas seria preciso regex com a opcao i (topico 1.15).
+GET {{baseUrl}}/products?category=Electronics
+
+
+### 11) ERRO -- valor invalido em available
+# Esperado: 400 BAD_REQUEST -- expected one of "true"|"false"
+# "sim" nao vira true por adivinhacao.
+GET {{baseUrl}}/products?available=sim
+
+
+### 12) ERRO -- available numerico
+# Esperado: 400 BAD_REQUEST
+GET {{baseUrl}}/products?available=1
+
+
+### 13) ERRO -- parametro desconhecido
+# Esperado: 400 BAD_REQUEST -- Unrecognized key: "categoria"
+# O schema e `strict`: um erro de digitacao avisa em vez de ser ignorado.
+GET {{baseUrl}}/products?categoria=electronics
+
+
+### 14) ERRO -- limit acima do teto (MAX_LIMIT = 100)
+# Esperado: 400 BAD_REQUEST -- "limit deve estar entre 1 e 100"
+# O teto impede que uma requisicao peca a collection inteira.
+GET {{baseUrl}}/products?limit=5000
+
+
+### 15) ERRO -- limit zero
+# Esperado: 400 BAD_REQUEST
+GET {{baseUrl}}/products?limit=0
+
+
+### 16) ERRO -- limit nao numerico
+# Esperado: 400 BAD_REQUEST -- "limit deve ser um numero inteiro"
+# Sem essa checagem, Number("abc") seria NaN e o driver daria um erro obscuro.
+GET {{baseUrl}}/products?limit=abc
+
+
+### 17) ERRO -- tentativa de injecao de operador na query
+# Esperado: 400 BAD_REQUEST
+# Sem validacao, isso viraria o filtro { category: { $ne: "electronics" } } e
+# devolveria justamente o que NAO foi pedido.
+GET {{baseUrl}}/products?category[$ne]=electronics

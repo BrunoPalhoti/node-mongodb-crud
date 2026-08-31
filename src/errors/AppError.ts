@@ -1,10 +1,3 @@
-/**
- * Erros de dominio com status HTTP embutido.
- *
- * A ideia e que services e repositories possam sinalizar "nao encontrado" ou
- * "conflito" sem conhecer o Express, e o middleware de erro traduza isso para
- * a resposta HTTP. Erros nao previstos viram 500 sem vazar stack trace.
- */
 export class AppError extends Error {
   readonly status: number;
   readonly code: string;
