@@ -1,12 +1,8 @@
 import type { Filter, ObjectId } from "mongodb";
-import { productsCollection } from "../db/collections.js";
-import type { NewProductDocument, ProductDocument } from "../types/product.js";
-
-
-export interface ProductQueryCriteria {
-  category?: string;
-  available?: boolean;
-}
+import { productsCollection } from "../../db/collections.js";
+import type { NewProductDocument, ProductDocument } from "../../types/product.js";
+import type { ProductQueryCriteria, ProductUpdateFields } from "../../types/productFilters.js";
+import type { UpdateOutcome } from "../types.js";
 
 function buildFilter(criteria: ProductQueryCriteria): Filter<ProductDocument> {
   const filter: Filter<ProductDocument> = {};
@@ -35,19 +31,6 @@ export async function findProducts(
 export async function findProductById(id: ObjectId): Promise<ProductDocument | null> {
   return productsCollection().findOne({ _id: id });
 }
-
-/** Resultado bruto do updateOne, sem interpretacao: quem decide e o service. */
-export interface UpdateOutcome {
-  matched: number;
-  modified: number;
-}
-
-/** Campos aceitos numa atualizacao parcial.*/
-export type ProductUpdateFields = {
-  [K in keyof Omit<NewProductDocument, "createdAt" | "updatedAt">]?:
-    | NewProductDocument[K]
-    | undefined;
-};
 
 /** updateOne() com $set */
 export async function updateProductById(

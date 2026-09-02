@@ -1,5 +1,5 @@
 import type { ObjectId } from "mongodb";
-import { cartsCollection } from "../db/collections.js";
+import { cartsCollection } from "../../db/collections.js";
 
 /**
  * REPOSITORY de carrinhos.

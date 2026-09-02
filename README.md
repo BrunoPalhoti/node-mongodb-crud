@@ -62,6 +62,7 @@ src/
   errors/AppError.ts          erros de dominio com status HTTP
   errors/errorHandler.ts      traducao de erros para resposta JSON
   types/                      tipos dos documentos (product, user, cart)
+  types/productFilters.ts     criterios de busca e campos de patch de produto
   validation/                 schemas zod, conversao de ObjectId e parseOrThrow
   validation/queryParams.ts   conversores de query string (limit, booleano)
   http/respond.ts             res.success: envelope e status da resposta
@@ -70,6 +71,9 @@ src/
   controllers/                HTTP: status e formato da resposta
   services/                   regras da aplicacao
   repositories/               unico lugar com queries MongoDB
+  repositories/types.ts       resultado bruto de escrita (UpdateOutcome)
+  repositories/products/      persistencia de produto
+  repositories/carts/         persistencia de carrinho
   db/collections.ts           nomes das collections associados aos tipos
   db/indexes.ts               definicao dos indices da aplicacao
   scripts/checkConnection.ts  verificacao de ambiente, somente leitura

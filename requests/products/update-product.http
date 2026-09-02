@@ -5,7 +5,7 @@
 ### continuam como estao -- e isso e o que `$set` garante.
 ###
 ### Arquivos: routes/productRoutes.ts -> controllers/productController.ts
-###           -> services/productService.ts -> repositories/productRepository.ts
+###           -> services/productService.ts -> repositories/products/productRepository.ts
 ###
 ### No meta da resposta vem `matched` e `modified`:
 ###   matched  -- o filtro { _id } encontrou o documento

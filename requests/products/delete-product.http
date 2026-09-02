@@ -9,8 +9,8 @@
 ### O MongoDB nao tem chave estrangeira -- essa garantia e da aplicacao.
 ###
 ### Arquivos: routes/productRoutes.ts -> controllers/productController.ts
-###           -> services/productService.ts -> repositories/productRepository.ts
-###           -> repositories/cartRepository.ts (checagem de integridade)
+###           -> services/productService.ts -> repositories/products/productRepository.ts
+###           -> repositories/carts/cartRepository.ts (checagem de integridade)
 ### =====================================================================
 
 @baseUrl = http://localhost:3000

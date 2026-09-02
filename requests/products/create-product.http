@@ -3,7 +3,7 @@
 ###
 ### Cria um produto na collection `products`.
 ### Arquivos: routes/productRoutes.ts -> controllers/productController.ts
-###           -> services/productService.ts -> repositories/productRepository.ts
+###           -> services/productService.ts -> repositories/products/productRepository.ts
 ### =====================================================================
 
 @baseUrl = http://localhost:3000

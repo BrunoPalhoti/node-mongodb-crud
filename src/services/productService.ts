@@ -1,6 +1,6 @@
 import { conflict, notFound } from "../errors/AppError.js";
-import * as cartRepository from "../repositories/cartRepository.js";
-import * as productRepository from "../repositories/productRepository.js";
+import * as cartRepository from "../repositories/carts/cartRepository.js";
+import * as productRepository from "../repositories/products/productRepository.js";
 import type { ProductDocument } from "../types/product.js";
 import { toObjectId } from "../validation/objectId.js";
 import type {
