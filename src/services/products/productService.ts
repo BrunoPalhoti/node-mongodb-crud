@@ -1,7 +1,7 @@
 import { conflict, notFound } from "../../errors/AppError.js";
-import * as cartRepository from "../../repositories/carts/cartRepository.js";
 import * as productRepository from "../../repositories/products/productRepository.js";
 import type { ProductDocument } from "../../types/product.js";
+import { omitUndefined } from "../../util/omitUndefined.js";
 import { toObjectId } from "../../validation/objectId.js";
 import type {
   CreateProductInput,
@@ -56,40 +56,30 @@ export async function getProductById(id: string): Promise<ProductDocument> {
   return product;
 }
 
-export interface UpdateProductResult {
-  product: ProductDocument;
-  matched: number;
-  modified: number;
-}
-
 export async function updateProduct(
   id: string,
   input: UpdateProductInput,
-): Promise<UpdateProductResult> {
+): Promise<ProductDocument> {
   const objectId = toObjectId(id);
+  const product = await productRepository.updateProductById(objectId, {
+    ...omitUndefined(input),
+    updatedAt: new Date(),
+  });
 
-  const outcome = await productRepository.updateProductById(objectId, input);
-
-  /** matched = 0 significa que o filtro nao achou ninguem: o id e valido, mas o
-   * documento nao existe. Nada foi criado, porque nao usamos upsert.
-   */
-  if (outcome.matched === 0) throw notFound(`Produto ${id} nao encontrado.`);
-
-  const product = await productRepository.findProductById(objectId);
   if (!product) throw notFound(`Produto ${id} nao encontrado.`);
 
-  return { product, matched: outcome.matched, modified: outcome.modified };
+  return product;
 }
 
 export async function deleteProduct(id: string): Promise<void> {
   const objectId = toObjectId(id);
 
-  const cartsUsingProduct = await productInCartDeletionGuard.inspect(objectId);
-  if (!cartsUsingProduct.canDelete) {
+  const usage = await productInCartDeletionGuard.inspect(objectId);
+  if (!usage.canDelete) {
     throw conflict(
-      `Produto ${id} nao pode ser excluido: esta referenciado em ${cartsUsingProduct} carrinho(s).`,
+      `Produto ${id} nao pode ser excluido: esta referenciado em ${usage.cartCount} carrinho(s).`,
       {
-        cartsReferencing: cartsUsingProduct,
+        cartsReferencing: usage.cartCount,
         hint: 'Para tirar de circulacao preservando o historico: PATCH /products/<id> { "available": false }',
       },
     );

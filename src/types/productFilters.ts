@@ -5,9 +5,7 @@ export interface ProductQueryCriteria {
   available?: boolean;
 }
 
-/** Campos aceitos numa atualizacao parcial. */
-export type ProductUpdateFields = {
-  [K in keyof Omit<NewProductDocument, "createdAt" | "updatedAt">]?:
-    | NewProductDocument[K]
-    | undefined;
-};
+/** Patch persistido no `$set`: sem `undefined` e com `updatedAt`. */
+export type ProductPatch = {
+  [K in keyof Omit<NewProductDocument, "createdAt" | "externalId" | "updatedAt">]?: NewProductDocument[K];
+} & { updatedAt: Date };

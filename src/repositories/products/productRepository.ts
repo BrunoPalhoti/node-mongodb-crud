@@ -1,8 +1,7 @@
 import type { ObjectId } from "mongodb";
 import { productsCollection } from "../../db/collections.js";
 import type { NewProductDocument, ProductDocument } from "../../types/product.js";
-import type { ProductQueryCriteria, ProductUpdateFields } from "../../types/productFilters.js";
-import type { UpdateOutcome } from "../types.js";
+import type { ProductPatch, ProductQueryCriteria } from "../../types/productFilters.js";
 import { buildEqualityFilter } from "../../util/buildEqualityFilter.js";
 
 export async function insertProduct(document: NewProductDocument): Promise<ObjectId> {
@@ -23,20 +22,13 @@ export async function findProductById(id: ObjectId): Promise<ProductDocument | n
 
 export async function updateProductById(
   id: ObjectId,
-  fields: ProductUpdateFields,
-): Promise<UpdateOutcome> {
-  const changes: Record<string, unknown> = { updatedAt: new Date() };
-  for (const [field, value] of Object.entries(fields)) {
-    if (value !== undefined) changes[field] = value;
-  }
-
-  const result = await productsCollection().updateOne({ _id: id }, { $set: changes });
-
-  /** matchedCount: quantos documentos o FILTRO encontrou.
-   * modifiedCount: em quantos deles algo realmente mudou no disco.
-   * Sao numeros diferentes: reenviar o mesmo valor da matched 1 e modified 0.
-   */
-  return { matched: result.matchedCount, modified: result.modifiedCount };
+  fields: ProductPatch,
+): Promise<ProductDocument | null> {
+  return productsCollection().findOneAndUpdate(
+    { _id: id },
+    { $set: fields },
+    { returnDocument: "after" },
+  );
 }
 
 export async function deleteProductById(id: ObjectId): Promise<number> {

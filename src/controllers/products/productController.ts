@@ -49,15 +49,15 @@ export async function getById(
   
 }
 
-/** PATCH /products/:id -- updateOne com $set */
+/** PATCH /products/:id -- findOneAndUpdate com $set */
 export async function update(
   req: Request,
   res: Response,
 ): Promise<Response | void> {
     const input = parseOrThrow(updateProductSchema, req.body, "Payload invalido.");
-    const result = await productService.updateProduct(pathId(req), input);
+    const product = await productService.updateProduct(pathId(req), input);
 
-    return res.success(result.product, { matched: result.matched, modified: result.modified });
+    return res.success(product);
 }
 
 /** DELETE /products/:id -- deleteOne */
