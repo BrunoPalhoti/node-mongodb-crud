@@ -1,32 +1,59 @@
-import type { Db } from "mongodb";
-import { cartsCollection, productsCollection, usersCollection } from "./collections.js";
+import type { CreateIndexesOptions, Db, IndexSpecification } from "mongodb";
+import { COLLECTIONS } from "./collections.js";
+
+type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];
+
+type IndexDef = {
+  keys: IndexSpecification;
+  options?: CreateIndexesOptions;
+};
+
+type CollectionIndexes = {
+  collection: CollectionName;
+  indexes: IndexDef[];
+};
+
+const partialUniqueExternalId: CreateIndexesOptions = {
+  unique: true,
+  partialFilterExpression: { externalId: { $exists: true } },
+  name: "externalId_unique_partial",
+};
+
+const INDEXES_BY_COLLECTION: CollectionIndexes[] = [
+  {
+    collection: COLLECTIONS.products,
+    indexes: [
+      { keys: { externalId: 1 }, options: partialUniqueExternalId },
+      { keys: { category: 1, price: 1 }, options: { name: "category_price" } },
+      { keys: { price: 1 }, options: { name: "price" } },
+      { keys: { "rating.rate": -1 }, options: { name: "rating_rate_desc" } },
+    ],
+  },
+  {
+    collection: COLLECTIONS.users,
+    indexes: [
+      { keys: { externalId: 1 }, options: partialUniqueExternalId },
+      { keys: { email: 1 }, options: { unique: true, name: "email_unique" } },
+      { keys: { username: 1 }, options: { unique: true, name: "username_unique" } },
+    ],
+  },
+  {
+    collection: COLLECTIONS.carts,
+    indexes: [
+      { keys: { externalId: 1 }, options: partialUniqueExternalId },
+      { keys: { userId: 1, date: -1 }, options: { name: "userId_date" } },
+    ],
+  },
+];
 
 export async function ensureIndexes(db: Db): Promise<string[]> {
   const created: string[] = [];
 
-
-  const partialUniqueExternalId = {
-    unique: true,
-    partialFilterExpression: { externalId: { $exists: true } },
-    name: "externalId_unique_partial",
-  } as const;
-
-  created.push(await productsCollection(db).createIndex({ externalId: 1 }, partialUniqueExternalId));
-  created.push(await usersCollection(db).createIndex({ externalId: 1 }, partialUniqueExternalId));
-  created.push(await cartsCollection(db).createIndex({ externalId: 1 }, partialUniqueExternalId));
-
-
-  created.push(await productsCollection(db).createIndex({ category: 1, price: 1 }, { name: "category_price" }));
-
-  created.push(await productsCollection(db).createIndex({ price: 1 }, { name: "price" }));
-
-  
-  created.push(await productsCollection(db).createIndex({ "rating.rate": -1 }, { name: "rating_rate_desc" }));
-
-  created.push(await usersCollection(db).createIndex({ email: 1 }, { unique: true, name: "email_unique" }));
-  created.push(await usersCollection(db).createIndex({ username: 1 }, { unique: true, name: "username_unique" }));
-
-  created.push(await cartsCollection(db).createIndex({ userId: 1, date: -1 }, { name: "userId_date" }));
+  for (const { collection, indexes } of INDEXES_BY_COLLECTION) {
+    for (const { keys, options } of indexes) {
+      created.push(await db.collection(collection).createIndex(keys, options));
+    }
+  }
 
   return created;
 }

@@ -1,7 +1,6 @@
-import { closeMongo, connectToMongo } from "../db/mongo.js";
+import { COLLECTIONS } from "../db/collections.js";
 import { ensureIndexes } from "../db/indexes.js";
-import { cartsCollection, productsCollection, usersCollection } from "../db/collections.js";
-
+import { closeMongo, connectToMongo } from "../db/mongo.js";
 
 async function main(): Promise<void> {
   const dbArg = process.argv.find((a) => a.startsWith("--db="));
@@ -15,11 +14,8 @@ async function main(): Promise<void> {
 
   // Mostra o estado final por collection: nome, chaves e se e unico/parcial.
   // Equivalente no mongosh: db.products.getIndexes()
-  for (const [name, collection] of [
-    ["products", productsCollection(db)],
-    ["users", usersCollection(db)],
-    ["carts", cartsCollection(db)],
-  ] as const) {
+  for (const name of Object.values(COLLECTIONS)) {
+    const collection = db.collection(name);
     console.log(`[indexes] ${name}:`);
     for (const index of await collection.indexes()) {
       const flags = [
