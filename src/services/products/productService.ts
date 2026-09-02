@@ -1,17 +1,13 @@
-import { conflict, notFound } from "../errors/AppError.js";
-import * as cartRepository from "../repositories/carts/cartRepository.js";
-import * as productRepository from "../repositories/products/productRepository.js";
-import type { ProductDocument } from "../types/product.js";
-import { toObjectId } from "../validation/objectId.js";
+import { conflict, notFound } from "../../errors/AppError.js";
+import * as cartRepository from "../../repositories/carts/cartRepository.js";
+import * as productRepository from "../../repositories/products/productRepository.js";
+import type { ProductDocument } from "../../types/product.js";
+import { toObjectId } from "../../validation/objectId.js";
 import type {
   CreateProductInput,
   ListProductsQuery,
   UpdateProductInput,
-} from "../validation/productSchemas.js";
-
-/**
- * SERVICE -- regras da aplicacao, sem HTTP e sem MongoDB.
- */
+} from "../../validation/productSchemas.js";
 
 export async function createProduct(input: CreateProductInput): Promise<ProductDocument> {
   const now = new Date();
@@ -30,10 +26,6 @@ export async function createProduct(input: CreateProductInput): Promise<ProductD
 
   const insertedId = await productRepository.insertProduct(document);
 
-  /**
-   * O insertOne devolve so o insertedId. Montamos o documento completo com ele
-   * em vez de fazer uma segunda consulta ao banco: ja temos todos os campos.
-   */
   return { _id: insertedId, ...document };
 }
 

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import * as productService from "../../services/productService.js";
+import * as productService from "../../services/products/productService.js";
 import { parseOrThrow } from "../../validation/parseRequest.js";
 import {
   createProductSchema,
