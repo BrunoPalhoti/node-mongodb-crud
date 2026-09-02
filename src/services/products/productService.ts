@@ -8,6 +8,7 @@ import type {
   ListProductsQuery,
   UpdateProductInput,
 } from "../../validation/productSchemas.js";
+import { productInCartDeletionGuard } from "../carts/productInCartDeletionGuard.js";
 
 export async function createProduct(input: CreateProductInput): Promise<ProductDocument> {
   const now = new Date();
@@ -61,9 +62,6 @@ export interface UpdateProductResult {
   modified: number;
 }
 
-/**
- * Atualizacao parcial pelo _id.
- */
 export async function updateProduct(
   id: string,
   input: UpdateProductInput,
@@ -83,14 +81,11 @@ export async function updateProduct(
   return { product, matched: outcome.matched, modified: outcome.modified };
 }
 
-/**
- * Exclusao individual pelo _id, com checagem de integridade.
- */
 export async function deleteProduct(id: string): Promise<void> {
   const objectId = toObjectId(id);
 
-  const cartsUsingProduct = await cartRepository.countCartsWithProduct(objectId);
-  if (cartsUsingProduct > 0) {
+  const cartsUsingProduct = await productInCartDeletionGuard.inspect(objectId);
+  if (!cartsUsingProduct.canDelete) {
     throw conflict(
       `Produto ${id} nao pode ser excluido: esta referenciado em ${cartsUsingProduct} carrinho(s).`,
       {
@@ -101,6 +96,5 @@ export async function deleteProduct(id: string): Promise<void> {
   }
 
   const deletedCount = await productRepository.deleteProductById(objectId);
-
   if (deletedCount === 0) throw notFound(`Produto ${id} nao encontrado.`);
 }
