@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
-import * as productService from "../services/productService.js";
-import { parseOrThrow } from "../validation/parseRequest.js";
+import * as productService from "../../services/productService.js";
+import { parseOrThrow } from "../../validation/parseRequest.js";
 import {
   createProductSchema,
   listProductsQuerySchema,
   updateProductSchema,
-} from "../validation/productSchemas.js";
-import { pathId } from "../http/pathId.js";
+} from "../../validation/productSchemas.js";
+import { pathId } from "../../http/pathId.js";
 
 /** POST /products -- topico 1.1 (insertOne) */
 export async function create(

@@ -21,14 +21,14 @@ cp .env.example .env   # ajuste se sua URI/porta forem diferentes
 
 ## Scripts
 
-| Script              | O que faz                                                            |
-| ------------------- | -------------------------------------------------------------------- |
-| `npm run dev`       | Sobe a API com recarga automatica (`tsx watch`)                       |
-| `npm run build`     | Compila TypeScript para `dist/`                                       |
-| `npm start`         | Executa a versao compilada                                            |
-| `npm run typecheck` | Checagem de tipos sem gerar arquivos                                  |
-| `npm run check:db`  | Verifica conexao, versao do servidor e collections (somente leitura)  |
-| `npm run db:indexes`| Garante os indices da aplicacao (idempotente)                          |
+| Script               | O que faz                                                            |
+| -------------------- | -------------------------------------------------------------------- |
+| `npm run dev`        | Sobe a API com recarga automatica (`tsx watch`)                      |
+| `npm run build`      | Compila TypeScript para `dist/`                                      |
+| `npm start`          | Executa a versao compilada                                           |
+| `npm run typecheck`  | Checagem de tipos sem gerar arquivos                                 |
+| `npm run check:db`   | Verifica conexao, versao do servidor e collections (somente leitura) |
+| `npm run db:indexes` | Garante os indices da aplicacao (idempotente)                        |
 
 ## Variaveis de ambiente
 
@@ -40,6 +40,17 @@ cp .env.example .env   # ajuste se sua URI/porta forem diferentes
 | `PORT`            | `3000`                      | Porta HTTP                                     |
 | `DEFAULT_LIMIT`   | `20`                        | Limite padrao das listagens (topicos 1.2/1.12) |
 | `MAX_LIMIT`       | `100`                       | Teto de `?limit=` aceito                       |
+
+## Iniciar o MongoDB local manualmente
+
+O MongoDB deste laboratório não é iniciado pelo Homebrew. Para subir o servidor manualmente:
+
+```bash
+"$HOME/mongodb-data/mongod" \
+  --dbpath "$HOME/mongodb-data" \
+  --bind_ip 127.0.0.1 \
+  --port 27017
+```
 
 ## Estrutura
 
@@ -110,14 +121,14 @@ nao apenas pelo seed.
 
 ### Transformacoes decididas a partir dos dados reais
 
-| Origem                            | Modelo local                       | Motivo                                     |
-| --------------------------------- | ---------------------------------- | ------------------------------------------ |
-| `password` (users)                | **descartado**                     | autenticacao fora do escopo; nao versionar credencial |
-| `__v` (users, carts)              | **descartado**                     | residuo do ORM da fonte, sem significado local |
-| `id`                              | `externalId` (number)              | unico nas tres fontes; `_id` local e ObjectId |
-| `date` (carts) `"2020-03-02T..."` | `Date` do BSON                     | ISO 8601 valida; permite comparacao temporal |
-| `address.geolocation.lat/long`    | `number` (vinham como string)      | string nao suporta comparacao numerica     |
-| `rating`                          | mantido **embutido** no produto    | sempre lido junto do produto               |
+| Origem                            | Modelo local                    | Motivo                                                |
+| --------------------------------- | ------------------------------- | ----------------------------------------------------- |
+| `password` (users)                | **descartado**                  | autenticacao fora do escopo; nao versionar credencial |
+| `__v` (users, carts)              | **descartado**                  | residuo do ORM da fonte, sem significado local        |
+| `id`                              | `externalId` (number)           | unico nas tres fontes; `_id` local e ObjectId         |
+| `date` (carts) `"2020-03-02T..."` | `Date` do BSON                  | ISO 8601 valida; permite comparacao temporal          |
+| `address.geolocation.lat/long`    | `number` (vinham como string)   | string nao suporta comparacao numerica                |
+| `rating`                          | mantido **embutido** no produto | sempre lido junto do produto                          |
 
 ### Panorama dos dados (base para os filtros dos topicos 1.3, 1.15 e 1.16)
 
@@ -151,20 +162,20 @@ com e sem `externalId` convivendo.
 
 Base principal do laboratorio.
 
-| Campo         | Tipo       | Obrigatorio | Observacao                                   |
-| ------------- | ---------- | ----------- | -------------------------------------------- |
-| `_id`         | ObjectId   | automatico  | identificador local, usado nas rotas         |
-| `externalId`  | number     | **nao**     | `id` da fonte; **ausente** nos criados na API |
-| `title`       | string     | sim         |                                              |
-| `price`       | number     | sim         | finito, >= 0                                 |
-| `description` | string     | sim         |                                              |
-| `category`    | string     | sim         |                                              |
-| `image`       | string     | sim         |                                              |
-| `rating.rate` | number     | sim         | 0 a 5                                        |
-| `rating.count`| number     | sim         | inteiro >= 0                                 |
-| `available`   | boolean    | sim         | campo **local**, padrao `true`               |
-| `createdAt`   | Date       | automatico  | desempate na ordenacao                       |
-| `updatedAt`   | Date       | automatico  | atualizado nas escritas                      |
+| Campo          | Tipo     | Obrigatorio | Observacao                                    |
+| -------------- | -------- | ----------- | --------------------------------------------- |
+| `_id`          | ObjectId | automatico  | identificador local, usado nas rotas          |
+| `externalId`   | number   | **nao**     | `id` da fonte; **ausente** nos criados na API |
+| `title`        | string   | sim         |                                               |
+| `price`        | number   | sim         | finito, >= 0                                  |
+| `description`  | string   | sim         |                                               |
+| `category`     | string   | sim         |                                               |
+| `image`        | string   | sim         |                                               |
+| `rating.rate`  | number   | sim         | 0 a 5                                         |
+| `rating.count` | number   | sim         | inteiro >= 0                                  |
+| `available`    | boolean  | sim         | campo **local**, padrao `true`                |
+| `createdAt`    | Date     | automatico  | desempate na ordenacao                        |
+| `updatedAt`    | Date     | automatico  | atualizado nas escritas                       |
 
 ```json
 {
@@ -199,7 +210,9 @@ para exibir qualquer produto, sem ganho nenhum.
   "name": { "firstname": "john", "lastname": "doe" },
   "phone": "1-570-236-7033",
   "address": {
-    "street": "new road", "number": 7682, "city": "kilcoole",
+    "street": "new road",
+    "number": 7682,
+    "city": "kilcoole",
     "zipcode": "12926-3874",
     "geolocation": { "lat": -37.3159, "long": 81.1496 }
   }
@@ -247,22 +260,22 @@ nao presente com `null`, porque null faria o documento entrar no indice unico.
 
 ### Indices
 
-| Collection | Indice                                            | Por que                                |
-| ---------- | ------------------------------------------------- | -------------------------------------- |
-| products   | `externalId` unico **parcial**                    | idempotencia do seed sem travar criacao local |
-| products   | `{category, price}`                               | filtro por categoria + ordenacao por preco |
-| products   | `{price}`                                         | faixas de preco e ordenacao            |
-| products   | `{"rating.rate": -1}`                             | filtro e ordenacao por nota            |
-| users      | `externalId` unico parcial, `email`, `username`   | email e username sao unicos no dominio |
-| carts      | `externalId` unico parcial, `{userId, date: -1}`  | "carrinhos de um usuario", mais recentes primeiro |
+| Collection | Indice                                           | Por que                                           |
+| ---------- | ------------------------------------------------ | ------------------------------------------------- |
+| products   | `externalId` unico **parcial**                   | idempotencia do seed sem travar criacao local     |
+| products   | `{category, price}`                              | filtro por categoria + ordenacao por preco        |
+| products   | `{price}`                                        | faixas de preco e ordenacao                       |
+| products   | `{"rating.rate": -1}`                            | filtro e ordenacao por nota                       |
+| users      | `externalId` unico parcial, `email`, `username`  | email e username sao unicos no dominio            |
+| carts      | `externalId` unico parcial, `{userId, date: -1}` | "carrinhos de um usuario", mais recentes primeiro |
 
 O **indice unico parcial** e o detalhe que faz o modelo funcionar:
 
 ```js
 db.products.createIndex(
   { externalId: 1 },
-  { unique: true, partialFilterExpression: { externalId: { $exists: true } } }
-)
+  { unique: true, partialFilterExpression: { externalId: { $exists: true } } },
+);
 ```
 
 Um indice unico comum trataria a ausencia do campo como `null` e aceitaria
@@ -316,13 +329,13 @@ editor com a extensao **REST Client** e clique em Send Request. Os exemplos em
 HTTP -> validacao (zod) -> controller -> service -> repository -> MongoDB -> resposta
 ```
 
-| Camada       | Responsabilidade                        | Nao faz                          |
-| ------------ | --------------------------------------- | -------------------------------- |
-| `validation/`| converte e valida entrada externa       | nao acessa banco                 |
-| `controllers/`| status HTTP e formato da resposta      | **nenhuma query MongoDB**        |
-| `services/`  | regras (defaults, 404, montar documento)| nao conhece `req` nem filtros    |
-| `repositories/`| **unico lugar** que fala com o driver | nao conhece HTTP                 |
-| `http/`      | `res.success`: envelope e status HTTP    | nao decide regra de negocio      |
+| Camada          | Responsabilidade                         | Nao faz                       |
+| --------------- | ---------------------------------------- | ----------------------------- |
+| `validation/`   | converte e valida entrada externa        | nao acessa banco              |
+| `controllers/`  | status HTTP e formato da resposta        | **nenhuma query MongoDB**     |
+| `services/`     | regras (defaults, 404, montar documento) | nao conhece `req` nem filtros |
+| `repositories/` | **unico lugar** que fala com o driver    | nao conhece HTTP              |
+| `http/`         | `res.success`: envelope e status HTTP    | nao decide regra de negocio   |
 
 ## Formato das respostas
 
@@ -338,9 +351,9 @@ Os controllers respondem sempre com o mesmo metodo, instalado no `res` pelo
 middleware de `src/http/respond.ts`:
 
 ```ts
-return res.success(product);                    // POST -> 201, GET -> 200
-return res.success(products, { limit });        // array -> 200 + meta.count
-return res.success();                           // sem corpo -> 204
+return res.success(product); // POST -> 201, GET -> 200
+return res.success(products, { limit }); // array -> 200 + meta.count
+return res.success(); // sem corpo -> 204
 ```
 
 O status nao e passado a mao: sai do metodo HTTP da requisicao (`POST` = 201,
@@ -384,11 +397,11 @@ enviado), **409** violacao de indice unico.
 
 Lista produtos. Sem query params, e um `find({})`.
 
-| Query param | Formato                | Padrao | Efeito                       |
-| ----------- | ---------------------- | ------ | ---------------------------- |
-| `category`  | texto, 1 a 100 chars   | -      | igualdade exata              |
-| `available` | exatamente `true`/`false` | -   | igualdade exata              |
-| `limit`     | inteiro 1 a 100        | 20     | limita **documentos**        |
+| Query param | Formato                   | Padrao | Efeito                |
+| ----------- | ------------------------- | ------ | --------------------- |
+| `category`  | texto, 1 a 100 chars      | -      | igualdade exata       |
+| `available` | exatamente `true`/`false` | -      | igualdade exata       |
+| `limit`     | inteiro 1 a 100           | 20     | limita **documentos** |
 
 Parametros desconhecidos viram **400** (`?categoria=` em vez de `?category=`
 avisa em vez de ser ignorado).
@@ -447,7 +460,7 @@ neste projeto `modified` sera sempre 1 quando houver match, porque `updatedAt`
 muda em todo `$set`. Para observar a diferenca, rode no mongosh sem essa data:
 
 ```js
-db.products.updateOne({ _id: ObjectId("...") }, { $set: { price: 129.9 } })
+db.products.updateOne({ _id: ObjectId("...") }, { $set: { price: 129.9 } });
 // 1a vez: modifiedCount 1   2a vez: modifiedCount 0
 ```
 
@@ -497,17 +510,17 @@ curl http://localhost:3000/health/db
 
 ## Mapeamento dos topicos
 
-| Topico | Endpoint | Exemplo | Metodo no repository |
-| ------ | -------- | ------- | -------------------- |
-| 1.1 `insertOne()` | `POST /products` | `curl -X POST .../products -d '{...}'` | `insertProduct()` |
-| 1.2 `find()` sem filtro | `GET /products` | `curl ".../products"` | `findProducts({}, limit)` |
-| 1.3 `find()` com igualdade | `GET /products?category=` | `curl ".../products?category=electronics"` | `findProducts({category}, limit)` |
-| 1.4 `findOne()` | `GET /products/:id` | `curl ".../products/6a9591..."` | `findProductById()` |
-| 1.6 `updateOne()` | `PATCH /products/:id` | `curl -X PATCH .../products/6a9591... -d '{"price":129.9}'` | `updateProductById()` |
-| 1.8 `deleteOne()` | `DELETE /products/:id` | `curl -X DELETE .../products/6a9591...` | `deleteProductById()` |
-| 1.10 `countDocuments()` (parcial) | integridade do `DELETE` | `curl -X DELETE .../products/<id-em-carrinho>` | `countCartsWithProduct()` |
-| 1.12 `limit()` | `GET /products?limit=` | `curl ".../products?limit=3"` | `findProducts(..., limit)` |
-| 1.14 campos internos (parcial) | integridade do `DELETE` | idem acima | `countCartsWithProduct()` (`"items.productId"`) |
+| Topico                            | Endpoint                  | Exemplo                                                     | Metodo no repository                            |
+| --------------------------------- | ------------------------- | ----------------------------------------------------------- | ----------------------------------------------- |
+| 1.1 `insertOne()`                 | `POST /products`          | `curl -X POST .../products -d '{...}'`                      | `insertProduct()`                               |
+| 1.2 `find()` sem filtro           | `GET /products`           | `curl ".../products"`                                       | `findProducts({}, limit)`                       |
+| 1.3 `find()` com igualdade        | `GET /products?category=` | `curl ".../products?category=electronics"`                  | `findProducts({category}, limit)`               |
+| 1.4 `findOne()`                   | `GET /products/:id`       | `curl ".../products/6a9591..."`                             | `findProductById()`                             |
+| 1.6 `updateOne()`                 | `PATCH /products/:id`     | `curl -X PATCH .../products/6a9591... -d '{"price":129.9}'` | `updateProductById()`                           |
+| 1.8 `deleteOne()`                 | `DELETE /products/:id`    | `curl -X DELETE .../products/6a9591...`                     | `deleteProductById()`                           |
+| 1.10 `countDocuments()` (parcial) | integridade do `DELETE`   | `curl -X DELETE .../products/<id-em-carrinho>`              | `countCartsWithProduct()`                       |
+| 1.12 `limit()`                    | `GET /products?limit=`    | `curl ".../products?limit=3"`                               | `findProducts(..., limit)`                      |
+| 1.14 campos internos (parcial)    | integridade do `DELETE`   | idem acima                                                  | `countCartsWithProduct()` (`"items.productId"`) |
 
 ## Progresso
 
