@@ -1,4 +1,4 @@
-import type { NextFunction, Request, Response } from "express";
+import type { Request, Response } from "express";
 import * as productService from "../services/productService.js";
 import { parseOrThrow } from "../validation/parseRequest.js";
 import {
